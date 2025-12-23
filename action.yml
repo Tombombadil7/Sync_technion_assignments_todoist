@@ -1,0 +1,32 @@
+name: 'Technion Task Sync Logic'
+description: 'Core logic to sync Moodle and Cs ("grades") site calendars to Todoist'
+inputs:
+  todoist_api_key:
+    description: 'Todoist API Key'
+    required: true
+  moodle_url:
+    description: 'Moodle iCal URL'
+    required: true
+  grades_url:
+    description: 'Grades iCal URL'
+    required: false
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install Dependencies
+      shell: bash
+      run: npm install
+      working-directory: ${{ github.action_path }}
+
+    - name: Run Sync Script
+      shell: bash
+      run: node ${{ github.action_path }}/sync_moodle.js
+      env:
+        TODOIST_API_KEY: ${{ inputs.todoist_api_key }}
+        MOODLE_URL: ${{ inputs.moodle_url }}
+        GRADES_URL: ${{ inputs.grades_url }}
