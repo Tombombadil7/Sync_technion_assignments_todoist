@@ -57,8 +57,9 @@ jobs:
           git add todoist_state.json calendar.ics
           git commit -m "Update state [skip ci]" || exit 0
           git push
+```
 
-4###. הרשאות אחרונות
+### 4. הרשאות אחרונות
 ​עבור ל-Settings > Actions > General ותחת Workflow permissions בחר ב-Read and write permissions.
 ​🔄 עדכונים
 ​כל תיקון באג או עדכון של מיפויי קורסים שאבצע בריפו הזה יתעדכן אצלך באופן אוטומטי בהרצה הבאה.
