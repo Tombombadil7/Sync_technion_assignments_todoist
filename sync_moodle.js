@@ -25,9 +25,10 @@ const CONFIG = {
 };
 
 // --- ENV VARS ---
-const MOODLE_URL = process.env.MOODLE_URL;
-const GRADES_URL = process.env.GRADES_URL;
-const TODOIST_TOKEN = process.env.TODOIST_API_KEY;
+const MOODLE_URL = process.env.MOODLE_URL; //
+const GRADES_URL = process.env.GRADES_URL; //
+const TODOIST_TOKEN = process.env.TODOIST_API_KEY; //
+
 
 if (!TODOIST_TOKEN) { console.error("❌ Missing TODOIST_API_KEY"); process.exit(1); }
 
