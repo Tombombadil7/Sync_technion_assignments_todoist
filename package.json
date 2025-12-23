@@ -1,0 +1,11 @@
+{
+  "name": "student-automation",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node sync_moodle.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
