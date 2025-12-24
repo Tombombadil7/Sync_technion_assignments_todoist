@@ -20,18 +20,8 @@ async function loadRemoteCourseMap() {
     try {
         console.log(`📥 Fetching from: ${CONFIG.remote_courses_url}`);
         const res = await axios.get(CONFIG.remote_courses_url, { timeout: 10000 });
-        
-        console.log(`📡 Status: ${res.status}`);
-        if (typeof res.data !== 'object') {
-            throw new Error(`Expected JSON object but got ${typeof res.data}`);
-        }
-
         const rawData = res.data;
         const mapped = {};
-        
-        // בדיקה אם ה-JSON הגיע ריק
-        const keys = Object.keys(rawData);
-        if (keys.length === 0) console.log("⚠️ Warning: Remote JSON is empty.");
 
         for (const [courseId, data] of Object.entries(rawData)) {
             if (data.general && data.general["שם מקצוע"]) {
@@ -43,11 +33,7 @@ async function loadRemoteCourseMap() {
         console.log(`✅ Success: Loaded ${Object.keys(mapped).length} mapping variations.`);
         return mapped;
     } catch (e) {
-        console.error("❌ Diagnostic Error:");
-        console.error(`- Message: ${e.message}`);
-        if (e.response) {
-            console.error(`- Server responded with: ${e.response.status}`);
-        }
+        console.error(`❌ Diagnostic Error (Course Map): ${e.message}`);
         return {};
     }
 }
@@ -57,7 +43,6 @@ const getCourseID = (block) => {
     const matches = combined.match(/\d{6,8}/g);
     if (!matches) return null;
     
-    // מחפש התאמה במפה - בודק גם את המספר כפי שהוא וגם בלי אפסים מובילים
     for (const id of matches) {
         if (CONFIG.course_map[id]) return id;
         const noZeros = id.replace(/^0+/, '');
@@ -67,29 +52,44 @@ const getCourseID = (block) => {
 };
 
 async function run() {
-    if (!TODOIST_TOKEN) return console.error("❌ No Token");
+    if (!TODOIST_TOKEN) return console.error("❌ Missing TODOIST_API_KEY in environment.");
     
     CONFIG.course_map = await loadRemoteCourseMap();
 
     let allEvents = [];
-    for (const url of [MOODLE_URL, GRADES_URL]) {
-        if (!url) continue;
+    const sources = [
+        { name: "Moodle", url: MOODLE_URL },
+        { name: "Grades", url: GRADES_URL }
+    ];
+
+    for (const source of sources) {
+        if (!source.url) {
+            console.log(`⏭️ Skipping ${source.name}: URL is not provided.`);
+            continue;
+        }
         try {
-            const res = await axios.get(url);
+            console.log(`📥 Attempting to fetch ${source.name}...`);
+            const res = await axios.get(source.url, { 
+                timeout: 15000,
+                headers: { 'User-Agent': 'Mozilla/5.0' } 
+            });
             const events = res.data.match(/BEGIN:VEVENT[\s\S]+?END:VEVENT/gi) || [];
             allEvents.push(...events);
-        } catch (e) { console.error("❌ Fetch error"); }
+            console.log(`✅ ${source.name}: Found ${events.length} events.`);
+        } catch (e) { 
+            console.error(`❌ Fetch error for ${source.name}: ${e.message}`);
+            if (e.response) console.error(`   Status Code: ${e.response.status}`);
+        }
     }
 
     if (allEvents.length === 0) {
-        console.log("⚠️ No events found. Stopping to prevent deleting calendar.ics");
+        console.log("⚠️ No events found in any source. Stopping to prevent deleting calendar.ics");
         return;
     }
 
     const uniqueMap = new Map();
     const openMap = new Map();
     
-    // שלב 1: מיפוי זמני פתיחה
     allEvents.forEach(e => {
         const summary = getField(e, "SUMMARY");
         if (summary.includes("נפתח ב")) {
@@ -99,7 +99,6 @@ async function run() {
         }
     });
 
-    // שלב 2: פילטור וניקוי
     allEvents.forEach(e => {
         const summary = getField(e, "SUMMARY");
         if (CONFIG.ignored_phrases.some(p => summary.includes(p)) || summary.includes("נפתח ב")) return;
@@ -116,11 +115,9 @@ async function run() {
         if (uid) uniqueMap.set(uid, finalEvent);
     });
 
-    // שמירה ל-ICS
     const icsContent = ["BEGIN:VCALENDAR", "VERSION:2.0", ...uniqueMap.values(), "END:VCALENDAR"].join("\r\n");
     fs.writeFileSync(CONFIG.gh_ical_path, icsContent);
 
-    // סנכרון ל-Todoist
     let state = fs.existsSync(CONFIG.gh_state_path) ? JSON.parse(fs.readFileSync(CONFIG.gh_state_path)) : {};
     
     for (const [uid, event] of uniqueMap.entries()) {
@@ -146,7 +143,7 @@ async function run() {
                 const res = await axios.post("https://api.todoist.com/rest/v2/tasks", payload, { headers: { Authorization: `Bearer ${TODOIST_TOKEN}` } });
                 state[uid] = { id: res.data.id };
             }
-        } catch (e) { console.log("❌ Sync error"); }
+        } catch (e) { console.log(`❌ Todoist Sync error for ${uid}`); }
     }
     fs.writeFileSync(CONFIG.gh_state_path, JSON.stringify(state, null, 2));
 }
