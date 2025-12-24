@@ -1,11 +1,15 @@
 {
-  "name": "student-automation",
-  "version": "1.0.0",
+  "name": "technion-todoist-sync",
+  "version": "1.1.0",
+  "description": "Automated synchronization between Technion Moodle/Grades and Todoist",
+  "main": "sync_moodle.js",
   "type": "module",
   "scripts": {
     "start": "node sync_moodle.js"
   },
   "dependencies": {
     "axios": "^1.6.0"
-  }
+  },
+  "author": "Tombombadil7",
+  "license": "MIT"
 }
