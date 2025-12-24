@@ -18,24 +18,36 @@ const getField = (block, name) => block.match(new RegExp(`^${name}(?:;[^:]*)?:(.
 
 async function loadRemoteCourseMap() {
     try {
-        console.log("📥 Fetching remote course map...");
-        const res = await axios.get(CONFIG.remote_courses_url);
+        console.log(`📥 Fetching from: ${CONFIG.remote_courses_url}`);
+        const res = await axios.get(CONFIG.remote_courses_url, { timeout: 10000 });
+        
+        console.log(`📡 Status: ${res.status}`);
+        if (typeof res.data !== 'object') {
+            throw new Error(`Expected JSON object but got ${typeof res.data}`);
+        }
+
         const rawData = res.data;
         const mapped = {};
+        
+        // בדיקה אם ה-JSON הגיע ריק
+        const keys = Object.keys(rawData);
+        if (keys.length === 0) console.log("⚠️ Warning: Remote JSON is empty.");
 
-        // תיקון: מעבר על המפתחות (מספרי הקורס) ב-JSON
         for (const [courseId, data] of Object.entries(rawData)) {
             if (data.general && data.general["שם מקצוע"]) {
-                // שומרים גם את המספר המקורי וגם גרסה ללא אפסים מובילים ליתר ביטחון
                 const cleanId = courseId.replace(/^0+/, '');
                 mapped[courseId] = data.general["שם מקצוע"];
                 mapped[cleanId] = data.general["שם מקצוע"];
             }
         }
-        console.log(`✅ Loaded ${Object.keys(mapped).length} mapping variations.`);
+        console.log(`✅ Success: Loaded ${Object.keys(mapped).length} mapping variations.`);
         return mapped;
     } catch (e) {
-        console.error("❌ Failed to load remote map:", e.message);
+        console.error("❌ Diagnostic Error:");
+        console.error(`- Message: ${e.message}`);
+        if (e.response) {
+            console.error(`- Server responded with: ${e.response.status}`);
+        }
         return {};
     }
 }
