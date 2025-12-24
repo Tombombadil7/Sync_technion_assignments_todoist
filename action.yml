@@ -1,5 +1,5 @@
-name: 'Technion Task Sync Logic'
-description: 'Core logic to sync Moodle and Cs ("grades") site calendars to Todoist'
+name: 'Technion Task Sync Action'
+description: 'מנוע לסנכרון משימות מודל וטכניון ל-Todoist'
 inputs:
   todoist_api_key:
     description: 'Todoist API Key'
