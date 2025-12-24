@@ -29,10 +29,10 @@
 צור קובץ בנתיב `.github/workflows/sync.yml` והדבק בתוכו:
 
 ```yaml
-name: Task Sync
+name: Daily Task Sync
 on:
   schedule:
-    - cron: '*/30 * * * *' # רץ כל 30 דקות
+    - cron: '0 * * * *' # Runs every hour
   workflow_dispatch:
 
 jobs:
@@ -41,21 +41,28 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Private Data
+        uses: actions/checkout@v3
 
-      - name: Run Sync Logic
-        uses: Tombombadil7/ical-cache-4b3fdc@main
+      - name: Run Logic from Public Repo
+        uses: Tombombadil7/Sync_technion_assignments_todoist@main
         with:
           todoist_api_key: ${{ secrets.TODOIST_API_KEY }}
           moodle_url: ${{ secrets.MOODLE_URL }}
           grades_url: ${{ secrets.GRADES_URL }}
+        env:
+          TODOIST_API_KEY: ${{ secrets.TODOIST_API_KEY }}
+          MOODLE_URL: ${{ secrets.MOODLE_URL }}
+          GRADES_URL: ${{ secrets.GRADES_URL }}
 
-      - name: Save State
+      - name: Commit and Push State
         run: |
-          git config --global user.name 'Sync Bot'
+          git config --global user.name 'Task Bot'
           git config --global user.email 'bot@github.com'
           git add todoist_state.json calendar.ics
-          git commit -m "Update state [skip ci]" || exit 0
+          git commit -m "Update task state [skip ci]" || exit 0
+          # Pull latest changes to avoid "rejected" error
+          git pull --rebase origin main
           git push
 ```
 
