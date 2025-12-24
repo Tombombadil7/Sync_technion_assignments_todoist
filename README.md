@@ -23,7 +23,7 @@
 בריפו הפרטי שיצרת, עבור ל-`Settings` > `Secrets and variables` > `Actions` והוסף:
 * `TODOIST_API_KEY`: הטוקן האישי שלך מ-Todoist.
 * `MOODLE_URL`: לינק ה-iCal מהמודל.
-* `GRADES_URL`: (אופציונלי) לינק ה-iCal של הציונים מהטכניון.
+* `GRADES_URL`: לינק של היומן מאתר מדמ"ח (אופציונלי)
 
 ### 3. יצירת קובץ ה-Workflow
 צור קובץ בנתיב `.github/workflows/sync.yml` והדבק בתוכו:
