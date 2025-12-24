@@ -2,143 +2,263 @@ import axios from "axios";
 import fs from "fs";
 import crypto from "crypto";
 
+// --- CONFIGURATION ---
 const CONFIG = {
-  remote_courses_url: "https://raw.githubusercontent.com/michael-maltsev/technion-sap-info-fetcher/refs/heads/gh-pages/courses_2025_200.json",
-  course_map: {}, 
-  ignored_phrases: ["לזום", "שעת קבלה", "זום", "Zoom", "ZOOM", "zoom"],
+    course_map: {
+    // סמסטר 1
+    "0850201": "מבוא לאווירו",
+    "3240033": "אנגלית טכנית",
+    "1140051": "פיסיקה 1",
+    "1040064": "אלגברה 1מ1",
+    "1040041": "חדו\"א 1מ1",
+    "2340128": "מבוא לפייתון",
+    "1250001": "כימיה כללית",
+    // סמסטר 2
+    "1140052": "פיסיקה 2",
+    "1040131": "מד\"ר",
+    "1040043": "חדו\"א 2מ'1",
+    "0845006": "מכניקת המוצקים",
+    "3140200": "חומרים לתעופה",
+    "3940800": "חינוך גופני 1",
+    // סמסטר 3
+    "1040215": "פונקציות מרוכבות",
+    "0940411": "הסתברות ת'",
+    "1040228": "מד\"ח",
+    "0840225": "דינמיקה מ'",
+    "0840213": "תרמודינמיקה",
+    "3940801": "חינוך גופני 2",
+    // סמסטר 4
+    "1140054": "פיסיקה 3",
+    "0840737": "מערכות דינמיות",
+    "0840311": "אווירודינמיקה 1",
+    "0840515": "מבוא לאלסטיות",
+    "0840135": "אנליזה נומרית",
+    "0840630": "שרטוט הנדסי",
+    // סמסטר 5 והלאה
+    "0440102": "בטיחות חשמל",
+    "0840738": "תורת הבקרה",
+    "0840314": "זרימה צמיגה",
+    "0840154": "שיטות ניסוי",
+    "0840312": "זרימה דחיסה",
+    "0840641": "תכן וייצור",
+    "0440098": "חשמל לתעופה"
+  },
+  ignored_phrases: [
+    "לזום",
+    "שעת קבלה",
+    "זום",
+    "Zoom",
+    "ZOOM",
+    "zoom"
+  ],
   gh_ical_path: "calendar.ics",
   gh_state_path: "todoist_state.json"
 };
 
-const MOODLE_URL = process.env.MOODLE_URL;
-const GRADES_URL = process.env.GRADES_URL;
-const TODOIST_TOKEN = process.env.TODOIST_API_KEY;
+// --- ENV VARS ---
+const MOODLE_URL = process.env.MOODLE_URL; //
+const GRADES_URL = process.env.GRADES_URL; //
+const TODOIST_TOKEN = process.env.TODOIST_API_KEY; //
 
-const getField = (block, name) => block.match(new RegExp(`^${name}(?:;[^:]*)?:(.*)$`, "mi"))?.[1]?.trim() || "";
 
-async function loadRemoteCourseMap() {
+if (!TODOIST_TOKEN) { console.error("❌ Missing TODOIST_API_KEY"); process.exit(1); }
+
+// --- HELPERS ---
+const extractEvents = (text) => text?.match(/BEGIN:VEVENT[\s\S]+?END:VEVENT/gi) || [];
+const getField = (block, name) => block.match(new RegExp(`^${name}(?:;[^:]*)?:(.*)$`, "mi"))?.[1].trim();
+
+const getCourseID = (block) => {
+    const cat = getField(block, "CATEGORIES")?.match(/(\d{6,9})(?:\.|$)/)?.[1];
+    if (cat) return cat;
+    const sum = getField(block, "SUMMARY")?.match(/\((\d{6,9})\)/)?.[1];
+    if (sum) return sum;
+    const m = getField(block, "UID")?.match(/\d{6,9}/g);
+    return m?.find(id => CONFIG.course_map[id]) || (m?.length > 1 && m[0].startsWith('20') ? m[1] : m?.[0]);
+};
+
+const toISO = (icalDate) => {
+    if (!icalDate) return null;
+    const c = icalDate.replace('Z', '');
+    return (c.length >= 15) ? `${c.substring(0,4)}-${c.substring(4,6)}-${c.substring(6,8)}T${c.substring(9,11)}:${c.substring(11,13)}:${c.substring(13,15)}` : null;
+};
+
+// Hash function to create short stable IDs
+const simpleHash = (str) => crypto.createHash('md5').update(str).digest('hex');
+
+// NEW: Fetch existing tasks from Todoist to prevent "Amnesia" duplicates
+async function fetchActiveTodoistTasks(token) {
     try {
-        console.log(`📥 Fetching course map...`);
-        const res = await axios.get(CONFIG.remote_courses_url, { timeout: 10000 });
-        const rawData = res.data;
-        const mapped = {};
-        for (const [courseId, data] of Object.entries(rawData)) {
-            if (data.general && data.general["שם מקצוע"]) {
-                const cleanId = courseId.replace(/^0+/, '');
-                mapped[courseId] = data.general["שם מקצוע"];
-                mapped[cleanId] = data.general["שם מקצוע"];
-            }
-        }
-        return mapped;
-    } catch (e) { 
-        console.error(`❌ Course Map Load Error: ${e.message}`);
-        return {}; 
+        // We filter by "שיעורי בית" label to only check relevant tasks
+        const res = await axios.get("https://api.todoist.com/rest/v2/tasks", {
+            headers: { Authorization: `Bearer ${token}` },
+            params: { filter: '@שיעורי בית' } 
+        });
+        return res.data;
+    } catch (e) {
+        console.log("⚠️ Could not fetch active tasks (API error). Proceeding with local state only.");
+        return [];
     }
 }
 
-const getCourseID = (block) => {
-    const combined = (getField(block, "CATEGORIES") + getField(block, "SUMMARY") + getField(block, "UID"));
-    const matches = combined.match(/\d{6,8}/g);
-    if (!matches) return null;
-    for (const id of matches) {
-        if (CONFIG.course_map[id]) return id;
-        const noZeros = id.replace(/^0+/, '');
-        if (CONFIG.course_map[noZeros]) return noZeros;
-    }
-    return matches[0];
-};
-
 async function run() {
-    if (!TODOIST_TOKEN) return console.error("❌ Missing TODOIST_API_KEY");
-    CONFIG.course_map = await loadRemoteCourseMap();
+    console.log("🚀 STARTING SYNC (No-Duplicate Mode)");
 
+    // --- STAGE 0: LOAD STATE ---
+    let state = {};
+    try {
+        if (fs.existsSync(CONFIG.gh_state_path)) {
+            state = JSON.parse(fs.readFileSync(CONFIG.gh_state_path, "utf-8"));
+            console.log(`✅ Loaded State DB (${Object.keys(state).length} records).`);
+        } else { console.log("ℹ️ State DB empty/missing. Starting fresh."); }
+    } catch (e) { console.log("⚠️ Corrupt State DB. Starting fresh."); }
+
+    // --- STAGE 0.5: HEAL STATE FROM REALITY ---
+    // This connects to Todoist to see what actually exists, preventing duplicates if state file is lost.
+    console.log("🔍 Scanning Todoist for existing tasks...");
+    const activeTasks = await fetchActiveTodoistTasks(TODOIST_TOKEN);
+    let healedCount = 0;
+    
+    activeTasks.forEach(task => {
+        // Look for UID in the task description: "UID: 12345"
+        const match = task.description.match(/UID: (\d+)/);
+        if (match && match[1]) {
+            const foundUid = match[1];
+            // If state doesn't have this task, add it so we update instead of create
+            if (!state[foundUid]) {
+                state[foundUid] = { id: task.id, sig: "recovered_from_api" };
+                healedCount++;
+            }
+        }
+    });
+    if (healedCount > 0) console.log(`🩹 Healed state: Found ${healedCount} existing tasks in Todoist.`);
+
+    // --- STAGE 1: FETCH SOURCES ---
+    console.log("\n--- STAGE 1: FETCH SOURCES ---");
     let allEvents = [];
-    for (const url of [MOODLE_URL, GRADES_URL]) {
-        if (!url) continue;
+
+    // Load local cache if available
+    if (fs.existsSync(CONFIG.gh_ical_path)) {
+        try { allEvents.push(...extractEvents(fs.readFileSync(CONFIG.gh_ical_path, "utf-8"))); } catch(e){}
+    }
+
+    const sources = [{ name: "Moodle", url: MOODLE_URL }, { name: "Grades", url: GRADES_URL }];
+    
+    for (const source of sources) {
+        if (!source.url) { console.log(`⏭️ Skipping ${source.name} (No URL)`); continue; }
         try {
-            const res = await axios.get(url);
-            const events = res.data.match(/BEGIN:VEVENT[\s\S]+?END:VEVENT/gi) || [];
-            allEvents.push(...events);
-        } catch (e) { console.error(`❌ URL Fetch error: ${e.message}`); }
+            console.log(`📥 Fetching ${source.name}...`);
+            const res = await axios.get(source.url, { responseType: 'text', headers: {"User-Agent": "Mozilla/5.0"} });
+            const fetchedEvents = extractEvents(typeof res.data === 'string' ? res.data : JSON.stringify(res.data));
+            allEvents.push(...fetchedEvents);
+            console.log(`   Found ${fetchedEvents.length} events.`);
+        } catch (e) { console.error(`❌ Fetch failed: ${source.name}`); }
     }
 
-    if (allEvents.length === 0) {
-        console.log("⚠️ No events found.");
-        return;
-    }
-
+    // --- STAGE 2: PROCESS ---
+    console.log("\n--- STAGE 2: PROCESS ---");
     const uniqueMap = new Map();
     const openMap = new Map();
+    const moodleRegex = /(נפתח ב|תאריך הגשה)[:\s]+(.*)/i;
     
+    // Pass 1: Open times
     allEvents.forEach(e => {
-        const summary = getField(e, "SUMMARY");
-        if (summary.includes("נפתח ב")) {
-            const title = summary.split(":")[1]?.trim();
-            const cid = getCourseID(e);
-            if (cid && title) openMap.set(`${cid}|${title}`, getField(e, "DTSTART"));
-        }
+          const cid = getCourseID(e);
+          const summary = getField(e, "SUMMARY") || "";
+          const match = summary.replace(/^.*? - /, "").match(moodleRegex);
+          if (cid && match && match[1].includes("נפתח ב")) {
+              openMap.set(`${cid}|${match[2].trim()}`, getField(e, "DTSTART"));
+          }
     });
 
-    allEvents.forEach(e => {
-        const summary = getField(e, "SUMMARY");
-        const uid = getField(e, "UID");
-        if (CONFIG.ignored_phrases.some(p => summary.includes(p)) || summary.includes("נפתח ב")) return;
+    // Pass 2: Filter & Clean
+    for (let e of allEvents) {
+      let summary = getField(e, "SUMMARY") || "";
+      if (CONFIG.ignored_phrases.some(p => summary.includes(p))) continue; 
+      if (summary.includes("נפתח ב")) continue;
 
-        const cid = getCourseID(e);
-        let finalEvent = e;
+      const cid = getCourseID(e);
+      const match = summary.replace(/^.*? - /, "").match(moodleRegex);
+      if (cid && match && match[1].includes("תאריך הגשה")) {
+        const openTime = openMap.get(`${cid}|${match[2].trim()}`);
+        if (openTime) e = e.replace(/^DTSTART(?:;[^:]*)?:.*$/m, `DTSTART:${openTime}`);
+      }
 
-        if (summary.includes("תאריך הגשה:")) {
-            const title = summary.split(":")[1]?.trim();
-            const openTime = openMap.get(`${cid}|${title}`);
-            if (openTime) finalEvent = finalEvent.replace(/^DTSTART.*$/m, `DTSTART:${openTime}`);
-        }
-        uniqueMap.set(uid, finalEvent);
-    });
-
-    fs.writeFileSync(CONFIG.gh_ical_path, ["BEGIN:VCALENDAR", "VERSION:2.0", ...uniqueMap.values(), "END:VCALENDAR"].join("\r\n"));
-
-    let state = fs.existsSync(CONFIG.gh_state_path) ? JSON.parse(fs.readFileSync(CONFIG.gh_state_path)) : {};
+      if (cid && CONFIG.course_map[cid] && !summary.startsWith(CONFIG.course_map[cid])) {
+          summary = `${CONFIG.course_map[cid]} - ${summary}`;
+      }
+      if (/(:| - )(יש להגיש|תאריך הגשה)/.test(summary)) summary = summary.replace(/(יש להגיש|תאריך הגשה)/g, "להגיש");
+      
+      e = e.replace(/^(SUMMARY(?:;[^:]*)?:)(.*)$/m, `$1${summary}`);
+      const uid = getField(e, "UID");
+      if (uid) uniqueMap.set(uid, e);
+    }
     
+    // --- STAGE 3: WRITE ICAL ---
+    const finalICS = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//TechnionMerged//EN", "METHOD:PUBLISH", ...uniqueMap.values(), "END:VCALENDAR"].join("\r\n");
+    fs.writeFileSync(CONFIG.gh_ical_path, finalICS, "utf-8");
+
+    // --- STAGE 4: TODOIST UPSERT ---
+    console.log("\n--- STAGE 4: TODOIST UPSERT ---");
+    let stats = { created: 0, updated: 0, skipped: 0 };
+
     for (const [uid, event] of uniqueMap.entries()) {
+        let end = getField(event, "DTEND");
+        let start = getField(event, "DTSTART");
+        if (start === end) start = null;
+        if (!end && start) { end = start; start = null; }
+        if (!end) continue;
+        
         const summary = getField(event, "SUMMARY");
         const cid = getCourseID(event);
-        const courseName = CONFIG.course_map[cid];
-        
-        let cleanTitle = summary.replace(/(יש להגיש|תאריך הגשה):/g, "להגיש");
-        if (courseName && !cleanTitle.includes(courseName)) cleanTitle = `${courseName} - ${cleanTitle}`;
-
-        const rawEnd = getField(event, "DTEND") || getField(event, "DTSTART");
-        let todoistDate = {};
-
-        // טיפול חכם בתאריכים: אירוע יום שלם לעומת אירוע עם שעה
-        if (rawEnd.length >= 15) {
-            todoistDate.due_datetime = rawEnd.replace('Z', '').substring(0,4)+'-'+rawEnd.substring(4,6)+'-'+rawEnd.substring(6,8)+'T'+rawEnd.substring(9,11)+':'+rawEnd.substring(11,13)+':'+rawEnd.substring(13,15);
-        } else {
-            todoistDate.due_date = rawEnd.substring(0,4)+'-'+rawEnd.substring(4,6)+'-'+rawEnd.substring(6,8);
-        }
+        const currentSig = `${summary}|${end}|${start || 'N/A'}`;
+        const cached = state[uid];
 
         const payload = {
-            content: cleanTitle,
-            ...todoistDate,
-            description: `🔑 UID: ${uid}`,
-            labels: courseName ? ["שיעורי בית", courseName] : ["שיעורי בית"]
+            content: summary,
+            due_datetime: toISO(end),
+            description: `📅 Opens: ${toISO(start) || 'N/A'}\n🔑 UID: ${uid}`,
+            priority: 4,
+            labels: (cid && CONFIG.course_map[cid]) ? ["שיעורי בית", CONFIG.course_map[cid]] : ["שיעורי בית"]
         };
 
         try {
-            const headers = { Authorization: `Bearer ${TODOIST_TOKEN.trim()}` };
-            if (state[uid]?.id) {
-                await axios.post(`https://api.todoist.com/rest/v2/tasks/${state[uid].id}`, payload, { headers });
+            if (cached && cached.id) {
+                // Task known in state (or healed from active scan)
+                if (cached.sig !== currentSig) {
+                    console.log(`🔄 Updating: "${summary}"`);
+                    await axios.post(`https://api.todoist.com/rest/v2/tasks/${cached.id}`, payload, {
+                        headers: { Authorization: `Bearer ${TODOIST_TOKEN}`, "Content-Type": "application/json" } 
+                    });
+                    state[uid] = { id: cached.id, sig: currentSig };
+                    stats.updated++;
+                } else { stats.skipped++; }
             } else {
-                const res = await axios.post("https://api.todoist.com/rest/v2/tasks", payload, { headers });
-                state[uid] = { id: res.data.id };
+                // Task truly new (not in state, not in active scan)
+                console.log(`📤 Creating: "${summary}"`);
+                
+                // SAFETY: Use Idempotency Key (UID Hash)
+                // If this runs twice quickly, Todoist blocks the 2nd one.
+                const res = await axios.post("https://api.todoist.com/rest/v2/tasks", payload, { 
+                    headers: { 
+                        Authorization: `Bearer ${TODOIST_TOKEN}`, 
+                        "Content-Type": "application/json",
+                        "X-Request-Id": simpleHash(uid) 
+                    } 
+                });
+                state[uid] = { id: res.data.id, sig: currentSig };
+                stats.created++;
             }
         } catch (e) { 
-            console.error(`❌ Todoist API Error for UID ${uid}:`);
-            console.error(`   Message: ${e.message}`);
-            if (e.response) console.error(`   Details: ${JSON.stringify(e.response.data)}`);
+             console.log(`⚠️ Note on ${uid}: ${e.response?.data?.error || e.message}`);
         }
     }
-    fs.writeFileSync(CONFIG.gh_state_path, JSON.stringify(state, null, 2));
+
+    // --- STAGE 5: SAVE DB ---
+    console.log(`\n🏁 Done: +${stats.created} | 🔄 ${stats.updated} | ⏭️ ${stats.skipped}`);
+    if (stats.created > 0 || stats.updated > 0 || healedCount > 0) {
+        fs.writeFileSync(CONFIG.gh_state_path, JSON.stringify(state, null, 2), "utf-8");
+        console.log(`💾 State Saved.`);
+    }
 }
 
 run();
