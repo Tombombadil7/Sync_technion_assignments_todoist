@@ -96,6 +96,8 @@ async function run() {
     console.log("🚀 STARTING SYNC (Flexible ID Mode)");
 
     let state = {};
+    let stateChanged = false; // דגל למעקב אחרי שינויים ב-State
+
     try {
         if (fs.existsSync(CONFIG.gh_state_path)) {
             state = JSON.parse(fs.readFileSync(CONFIG.gh_state_path, "utf-8"));
@@ -109,6 +111,7 @@ async function run() {
         const match = task.description.match(/UID: (\d+)/);
         if (match && match[1] && !state[match[1]]) {
             state[match[1]] = { id: task.id, sig: "recovered_from_api" };
+            stateChanged = true;
             healedCount++;
         }
     });
@@ -191,6 +194,7 @@ async function run() {
                         headers: { Authorization: `Bearer ${TODOIST_TOKEN}`, "Content-Type": "application/json" }
                     });
                     state[uid] = { id: cached.id, sig: currentSig };
+                    stateChanged = true;
                     stats.updated++;
                 } else { stats.skipped++; }
             } else {
@@ -202,21 +206,24 @@ async function run() {
                     }
                 });
                 state[uid] = { id: res.data.id, sig: currentSig };
+                stateChanged = true;
                 stats.created++;
             }
         } catch (e) {
-            // טיפול בשגיאת 404 מול Todoist: מחיקה מה-State כדי שהמשימה תיווצר מחדש
             if (e.response && e.response.status === 404 && cached) {
                 console.log(`🗑️ Task ${cached.id} (UID: ${uid}) not found in Todoist. Removing from state.`);
                 delete state[uid];
+                stateChanged = true; // סימון לשינוי כדי שהמחיקה תישמר לקובץ
             } else {
                 console.log(`⚠️ Error on ${uid}: ${e.message}`);
             }
         }
     }
 
-    if (stats.created > 0 || stats.updated > 0 || healedCount > 0) {
+    // שמירה אם היו יצירות, עדכונים, ריפוי או מחיקות
+    if (stateChanged || healedCount > 0) {
         fs.writeFileSync(CONFIG.gh_state_path, JSON.stringify(state, null, 2), "utf-8");
+        console.log("💾 State DB updated with changes.");
     }
     console.log(`\n🏁 Done: +${stats.created} | 🔄 ${stats.updated} | ⏭️ ${stats.skipped}`);
 }
