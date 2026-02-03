@@ -54,9 +54,7 @@ if (!TODOIST_TOKEN) { console.error("❌ Missing TODOIST_API_KEY"); process.exit
 const extractEvents = (text) => text?.match(/BEGIN:VEVENT[\s\S]+?END:VEVENT/gi) || [];
 const getField = (block, name) => block.match(new RegExp(`^${name}(?:;[^:]*)?:(.*)$`, "mi"))?.[1].trim();
 
-// Normalize ID by removing leading zeros for flexible comparison
 const cleanID = (id) => id?.replace(/^0+/, "");
-
 const getCourseID = (block) => {
     const cat = getField(block, "CATEGORIES")?.match(/(\d{6,9})(?:\.|$)/)?.[1];
     const sum = getField(block, "SUMMARY")?.match(/\((\d{6,9})\)/)?.[1];
@@ -132,7 +130,6 @@ async function run() {
     const uniqueMap = new Map();
     const openMap = new Map();
     const moodleRegex = /(נפתח ב|תאריך הגשה)[:\s]+(.*)/i;
-
     allEvents.forEach(e => {
         const cid = getCourseID(e);
         const summary = getField(e, "SUMMARY") || "";
@@ -160,7 +157,6 @@ async function run() {
             summary = `${courseName} - ${summary}`;
         }
         if (/(:| - )(יש להגיש|תאריך הגשה)/.test(summary)) summary = summary.replace(/(יש להגיש|תאריך הגשה)/g, "להגיש");
-
         e = e.replace(/^(SUMMARY(?:;[^:]*)?:)(.*)$/m, `$1${summary}`);
         const uid = getField(e, "UID");
         if (uid) uniqueMap.set(uid, e);
@@ -208,7 +204,15 @@ async function run() {
                 state[uid] = { id: res.data.id, sig: currentSig };
                 stats.created++;
             }
-        } catch (e) { console.log(`⚠️ Error on ${uid}: ${e.message}`); }
+        } catch (e) {
+            // טיפול בשגיאת 404 מול Todoist: מחיקה מה-State כדי שהמשימה תיווצר מחדש
+            if (e.response && e.response.status === 404 && cached) {
+                console.log(`🗑️ Task ${cached.id} (UID: ${uid}) not found in Todoist. Removing from state.`);
+                delete state[uid];
+            } else {
+                console.log(`⚠️ Error on ${uid}: ${e.message}`);
+            }
+        }
     }
 
     if (stats.created > 0 || stats.updated > 0 || healedCount > 0) {
