@@ -86,9 +86,6 @@ async function fetchActiveTodoistTasks(token) {
             params: { filter: '@שיעורי בית' }
         });
         
-        // --- THE FIX ---
-        // The new v1 API wraps the response in an object for pagination.
-        // We safely unwrap it here to guarantee we return an array.
         const data = res.data;
         return Array.isArray(data) ? data : (data.tasks || data.items || []);
         
@@ -103,6 +100,7 @@ async function run() {
 
     let state = {};
     let stateChanged = false; // דגל למעקב אחרי שינויים ב-State
+    let scriptErrors = []; // Track errors for GitHub Actions failure state
 
     try {
         if (fs.existsSync(CONFIG.gh_state_path)) {
@@ -133,7 +131,11 @@ async function run() {
         try {
             const res = await axios.get(source.url, { responseType: 'text', headers: { "User-Agent": "Mozilla/5.0" } });
             allEvents.push(...extractEvents(res.data));
-        } catch (e) { console.error(`❌ Fetch failed: ${source.name}`); }
+        } catch (e) { 
+            const errorMsg = `❌ Fetch failed: ${source.name} - ${e.message}`;
+            console.error(errorMsg); 
+            scriptErrors.push(errorMsg);
+        }
     }
 
     const uniqueMap = new Map();
@@ -222,7 +224,9 @@ async function run() {
                 delete state[uid];
                 stateChanged = true; // סימון לשינוי כדי שהמחיקה תישמר לקובץ
             } else {
-                console.log(`⚠️ Error on ${uid}: ${e.message}`);
+                const errorMsg = `⚠️ Error on ${uid}: ${e.message}`;
+                console.log(errorMsg);
+                scriptErrors.push(errorMsg);
             }
         }
     }
@@ -233,6 +237,12 @@ async function run() {
         console.log("💾 State DB updated with changes.");
     }
     console.log(`\n🏁 Done: +${stats.created} | 🔄 ${stats.updated} | ⏭️ ${stats.skipped}`);
+
+    // Check for accumulated errors to fail the workflow
+    if (scriptErrors.length > 0) {
+        console.error(`\n🚨 Script finished with ${scriptErrors.length} custom errors.`);
+        process.exit(1);
+    }
 }
 
 run();
