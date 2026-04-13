@@ -231,17 +231,23 @@ async function run() {
         }
     }
 
-    // שמירה אם היו יצירות, עדכונים, ריפוי או מחיקות
-    if (stateChanged || healedCount > 0) {
+if (stateChanged || healedCount > 0) {
         fs.writeFileSync(CONFIG.gh_state_path, JSON.stringify(state, null, 2), "utf-8");
         console.log("💾 State DB updated with changes.");
     }
     console.log(`\n🏁 Done: +${stats.created} | 🔄 ${stats.updated} | ⏭️ ${stats.skipped}`);
 
-    // Check for accumulated errors to fail the workflow
+    // --- WRITE TO GITHUB JOB SUMMARY ---
     if (scriptErrors.length > 0) {
         console.error(`\n🚨 Script finished with ${scriptErrors.length} custom errors.`);
-        process.exit(1);
+        
+        if (process.env.GITHUB_STEP_SUMMARY) {
+            const summaryText = `### 🚨 Sync Errors Detected\n\n` + 
+                                scriptErrors.map(err => `* ${err}`).join('\n');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryText);
+        }
+
+        process.exit(1); // Triggers the GitHub Failure Email
     }
 }
 
