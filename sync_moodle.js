@@ -85,7 +85,13 @@ async function fetchActiveTodoistTasks(token) {
             headers: { Authorization: `Bearer ${token}` },
             params: { filter: '@שיעורי בית' }
         });
-        return res.data;
+        
+        // --- THE FIX ---
+        // The new v1 API wraps the response in an object for pagination.
+        // We safely unwrap it here to guarantee we return an array.
+        const data = res.data;
+        return Array.isArray(data) ? data : (data.tasks || data.items || []);
+        
     } catch (e) {
         console.log("⚠️ Could not fetch active tasks. Proceeding with local state only.");
         return [];
@@ -108,7 +114,7 @@ async function run() {
     const activeTasks = await fetchActiveTodoistTasks(TODOIST_TOKEN);
     let healedCount = 0;
     activeTasks.forEach(task => {
-        const match = task.description.match(/UID: (\d+)/);
+        const match = task.description?.match(/UID: (\d+)/);
         if (match && match[1] && !state[match[1]]) {
             state[match[1]] = { id: task.id, sig: "recovered_from_api" };
             stateChanged = true;
