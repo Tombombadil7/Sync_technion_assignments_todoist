@@ -81,7 +81,7 @@ const simpleHash = (str) => crypto.createHash('md5').update(str).digest('hex');
 
 async function fetchActiveTodoistTasks(token) {
     try {
-        const res = await axios.get("https://api.todoist.com/rest/v2/tasks", {
+        const res = await axios.get("https://api.todoist.com/api/v1/tasks", {
             headers: { Authorization: `Bearer ${token}` },
             params: { filter: '@שיעורי בית' }
         });
@@ -191,7 +191,7 @@ async function run() {
         try {
             if (cached && cached.id) {
                 if (cached.sig !== currentSig) {
-                    await axios.post(`https://api.todoist.com/rest/v2/tasks/${cached.id}`, payload, {
+                    await axios.post(`https://api.todoist.com/api/v1/tasks/${cached.id}`, payload, {
                         headers: { Authorization: `Bearer ${TODOIST_TOKEN}`, "Content-Type": "application/json" }
                     });
                     state[uid] = { id: cached.id, sig: currentSig };
@@ -199,7 +199,7 @@ async function run() {
                     stats.updated++;
                 } else { stats.skipped++; }
             } else {
-                const res = await axios.post("https://api.todoist.com/rest/v2/tasks", payload, {
+                const res = await axios.post("https://api.todoist.com/api/v1/tasks", payload, {
                     headers: {
                         Authorization: `Bearer ${TODOIST_TOKEN}`,
                         "Content-Type": "application/json",
