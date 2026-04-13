@@ -38,7 +38,7 @@ const CONFIG = {
         "0840641": "תכן וייצור",
         "0440098": "חשמל לתעופה"
     },
-    ignored_phrases: ["לזום", "שעת קבלה", "זום", "Zoom", "ZOOM", "zoom"],
+    ignored_phrases: ["לזום", "שעת קבלה", "זום", "Zoom", "ZOOM", "zoom","technion.zoom.us"],
     gh_ical_path: "calendar.ics",
     gh_state_path: "todoist_state.json"
 };
@@ -144,7 +144,8 @@ async function run() {
 
     for (let e of allEvents) {
         let summary = getField(e, "SUMMARY") || "";
-        if (CONFIG.ignored_phrases.some(p => summary.includes(p))) continue;
+        let description = getField(e, "DESCRIPTION") || "";
+        if (CONFIG.ignored_phrases.some(p => summary.includes(p) || description.includes(p))) continue;
         if (summary.includes("נפתח ב")) continue;
 
         const cid = getCourseID(e);
