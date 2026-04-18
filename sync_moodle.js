@@ -38,7 +38,7 @@ const CONFIG = {
         "0840641": "תכן וייצור",
         "0440098": "חשמל לתעופה"
     },
-    ignored_phrases: ["לזום", "שעת קבלה", "זום", "Zoom", "ZOOM", "zoom","technion.zoom.us","- תרגול - קבוצה","הרצאה"]
+    ignored_phrases: ["לזום", "שעת קבלה", "זום", "Zoom", "ZOOM", "zoom","technion.zoom.us","- תרגול - קבוצה","הרצאה"],
     gh_ical_path: "calendar.ics",
     gh_state_path: "todoist_state.json"
 };
