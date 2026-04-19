@@ -142,8 +142,28 @@ async function run() {
         let summary = getField(e, "SUMMARY") || "";
         let description = getField(e, "DESCRIPTION") || "";
         
-        // שימוש במערך הביטויים החיצוני
-        if (ignoredPhrases.some(p => summary.includes(p) || description.includes(p))) continue;
+        // פונקציית ניקוי אגרסיבית: מסירה תווים בלתי נראים, מנרמלת רווחים והופכת לאותיות קטנות
+        const cleanText = (str) => {
+            return str
+                .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, '') // הסרת תווי שליטה וכיווניות
+                .replace(/\s+/g, ' ') // הפיכת כל סוגי הרווחים (כולל רווח קשיח) לרווח אחד רגיל
+                .toLowerCase()
+                .trim();
+        };
+
+        const cleanSummary = cleanText(summary);
+        const cleanDesc = cleanText(description);
+        
+        // בדיקה מול רשימת הביטויים (שעוברים גם הם ניקוי)
+        const shouldIgnore = ignoredPhrases.some(p => {
+            const cleanP = cleanText(p);
+            return cleanSummary.includes(cleanP) || cleanDesc.includes(cleanP);
+        });
+
+        if (shouldIgnore) {
+            console.log(`🚫 Filtered out: "${summary}"`); // תדפיס ללוג כדי שתוכל לראות שזה עבד
+            continue;
+        }
         if (summary.includes("נפתח ב")) continue;
 
         const cid = getCourseID(e);
