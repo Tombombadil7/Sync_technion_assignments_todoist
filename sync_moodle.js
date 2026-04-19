@@ -4,44 +4,29 @@ import crypto from "crypto";
 
 // --- CONFIGURATION ---
 const CONFIG = {
-    course_map: {
-        "0850201": "מבוא לאווירו",
-        "3240033": "אנגלית טכנית",
-        "1140051": "פיסיקה 1",
-        "1040064": "אלגברה 1מ1",
-        "1040041": "חדו\"א 1מ1",
-        "2340128": "מבוא לפייתון",
-        "1250001": "כימיה כללית",
-        "1140052": "פיסיקה 2",
-        "1040131": "מד\"ר",
-        "1040043": "חדו\"א 2מ'1",
-        "0840506": "מכניקת המוצקים",
-        "3140200": "חומרים לתעופה",
-        "3940800": "חינוך גופני 1",
-        "1040215": "פונקציות מרוכבות",
-        "0940411": "הסתברות ת'",
-        "1040228": "מד\"ח",
-        "0840225": "דינמיקה מ'",
-        "0840213": "תרמודינמיקה",
-        "3940801": "חינוך גופני 2",
-        "1140054": "פיסיקה 3",
-        "0840737": "מערכות דינמיות",
-        "0840311": "אווירודינמיקה 1",
-        "0840515": "מבוא לאלסטיות",
-        "0840135": "אנליזה נומרית",
-        "0840630": "שרטוט הנדסי",
-        "0440102": "בטיחות חשמל",
-        "0840738": "תורת הבקרה",
-        "0840314": "זרימה צמיגה",
-        "0840154": "שיטות ניסוי",
-        "0840312": "זרימה דחיסה",
-        "0840641": "תכן וייצור",
-        "0440098": "חשמל לתעופה"
-    },
-    ignored_phrases: ["לזום", "שעת קבלה", "זום", "Zoom", "ZOOM", "zoom","technion.zoom.us","- תרגול - קבוצה","הרצאה"],
     gh_ical_path: "calendar.ics",
-    gh_state_path: "todoist_state.json"
+    gh_state_path: "todoist_state.json",
+    course_map_path: "course_map.json",
+    ignored_phrases_path: "ignored_phrases.txt"
 };
+
+// טעינת נתונים חיצוניים
+let courseMap = {};
+let ignoredPhrases = [];
+
+try {
+    if (fs.existsSync(CONFIG.course_map_path)) {
+        courseMap = JSON.parse(fs.readFileSync(CONFIG.course_map_path, "utf-8"));
+    }
+    if (fs.existsSync(CONFIG.ignored_phrases_path)) {
+        ignoredPhrases = fs.readFileSync(CONFIG.ignored_phrases_path, "utf-8")
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0 && !line.startsWith('//'));
+    }
+} catch (e) {
+    console.error("❌ Error loading configuration files:", e.message);
+}
 
 // --- ENV VARS ---
 const MOODLE_URL = process.env.MOODLE_URL;
@@ -67,7 +52,7 @@ const getCourseID = (block) => {
 const getCourseName = (id) => {
     if (!id) return null;
     const target = cleanID(id);
-    const entry = Object.entries(CONFIG.course_map).find(([key]) => cleanID(key) === target);
+    const entry = Object.entries(courseMap).find(([key]) => cleanID(key) === target);
     return entry ? entry[1] : null;
 };
 
@@ -85,10 +70,8 @@ async function fetchActiveTodoistTasks(token) {
             headers: { Authorization: `Bearer ${token}` },
             params: { filter: '@שיעורי בית' }
         });
-        
         const data = res.data;
         return Array.isArray(data) ? data : (data.tasks || data.items || []);
-        
     } catch (e) {
         console.log("⚠️ Could not fetch active tasks. Proceeding with local state only.");
         return [];
@@ -96,11 +79,11 @@ async function fetchActiveTodoistTasks(token) {
 }
 
 async function run() {
-    console.log("🚀 STARTING SYNC (Flexible ID Mode)");
+    console.log(`🚀 STARTING SYNC (Loaded ${ignoredPhrases.length} phrases, ${Object.keys(courseMap).length} courses)`);
 
     let state = {};
-    let stateChanged = false; // דגל למעקב אחרי שינויים ב-State
-    let scriptErrors = []; // Track errors for GitHub Actions failure state
+    let stateChanged = false;
+    let scriptErrors = [];
 
     try {
         if (fs.existsSync(CONFIG.gh_state_path)) {
@@ -153,7 +136,9 @@ async function run() {
     for (let e of allEvents) {
         let summary = getField(e, "SUMMARY") || "";
         let description = getField(e, "DESCRIPTION") || "";
-        if (CONFIG.ignored_phrases.some(p => summary.includes(p) || description.includes(p))) continue;
+        
+        // שימוש במערך הביטויים החיצוני
+        if (ignoredPhrases.some(p => summary.includes(p) || description.includes(p))) continue;
         if (summary.includes("נפתח ב")) continue;
 
         const cid = getCourseID(e);
@@ -222,7 +207,7 @@ async function run() {
             if (e.response && e.response.status === 404 && cached) {
                 console.log(`🗑️ Task ${cached.id} (UID: ${uid}) not found in Todoist. Removing from state.`);
                 delete state[uid];
-                stateChanged = true; // סימון לשינוי כדי שהמחיקה תישמר לקובץ
+                stateChanged = true;
             } else {
                 const errorMsg = `⚠️ Error on ${uid}: ${e.message}`;
                 console.log(errorMsg);
@@ -231,23 +216,15 @@ async function run() {
         }
     }
 
-if (stateChanged || healedCount > 0) {
+    if (stateChanged || healedCount > 0) {
         fs.writeFileSync(CONFIG.gh_state_path, JSON.stringify(state, null, 2), "utf-8");
-        console.log("💾 State DB updated with changes.");
+        console.log("💾 State DB updated.");
     }
-    console.log(`\n🏁 Done: +${stats.created} | 🔄 ${stats.updated} | ⏭️ ${stats.skipped}`);
-
-    // --- WRITE TO GITHUB JOB SUMMARY ---
-    if (scriptErrors.length > 0) {
-        console.error(`\n🚨 Script finished with ${scriptErrors.length} custom errors.`);
-        
-        if (process.env.GITHUB_STEP_SUMMARY) {
-            const summaryText = `### 🚨 Sync Errors Detected\n\n` + 
-                                scriptErrors.map(err => `* ${err}`).join('\n');
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryText);
-        }
-
-        process.exit(1); // Triggers the GitHub Failure Email
+    
+    if (scriptErrors.length > 0 && process.env.GITHUB_STEP_SUMMARY) {
+        const summaryText = `### 🚨 Sync Errors Detected\n\n` + scriptErrors.map(err => `* ${err}`).join('\n');
+        fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryText);
+        process.exit(1);
     }
 }
 
