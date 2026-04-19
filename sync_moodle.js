@@ -36,7 +36,6 @@ const TODOIST_TOKEN = process.env.TODOIST_API_KEY;
 if (!TODOIST_TOKEN) { console.error("❌ Missing TODOIST_API_KEY"); process.exit(1); }
 
 // --- HELPERS ---
-// Unfold ICS lines first (removes the newline + space that splits long descriptions)
 const extractEvents = (text) => {
     if (!text) return [];
     const unfoldedText = text.replace(/\r?\n[ \t]/g, "");
@@ -61,15 +60,12 @@ const getCourseName = (id) => {
     return entry ? entry[1] : null;
 };
 
-// פונקציית תאריכים משופרת - מטפלת גם בשעות וגם באירועי "יום שלם"
 const toISO = (icalDate) => {
     if (!icalDate) return null;
     const c = icalDate.replace('Z', '');
     if (c.length >= 15) {
-        // הוספת Z בסוף עבור אזור זמן UTC
         return `${c.substring(0, 4)}-${c.substring(4, 6)}-${c.substring(6, 8)}T${c.substring(9, 11)}:${c.substring(11, 13)}:${c.substring(13, 15)}Z`;
     } else if (c.length >= 8) {
-        // פורמט תאריך בלבד לאירועי יום שלם
         return `${c.substring(0, 4)}-${c.substring(4, 6)}-${c.substring(6, 8)}`;
     }
     return null;
@@ -107,14 +103,25 @@ async function run() {
 
     const activeTasks = await fetchActiveTodoistTasks(TODOIST_TOKEN);
     let healedCount = 0;
+    
+    // --- התיקון למנגנון הריפוי ---
     activeTasks.forEach(task => {
-        const match = task.description?.match(/UID: (\d+)/);
-        if (match && match[1] && !state[match[1]]) {
-            state[match[1]] = { id: task.id, sig: "recovered_from_api" };
-            stateChanged = true;
-            healedCount++;
+        // Regex מתוקן שתופס את כל ה-UID כולל השטרודל והדומיין
+        const match = task.description?.match(/UID:\s*(\S+)/);
+        if (match && match[1]) {
+            const uid = match[1];
+            // אם המשימה לא קיימת בסטייט, או שה-ID שלה השתנה פתאום בגלל העדכון של Todoist
+            if (!state[uid] || state[uid].id !== task.id) {
+                state[uid] = { id: task.id, sig: state[uid]?.sig || "recovered_from_api" };
+                stateChanged = true;
+                healedCount++;
+            }
         }
     });
+
+    if (healedCount > 0) {
+        console.log(`🩹 Auto-healed ${healedCount} task IDs from Todoist API.`);
+    }
 
     let allEvents = [];
     if (fs.existsSync(CONFIG.gh_ical_path)) {
@@ -150,7 +157,6 @@ async function run() {
         let summary = getField(e, "SUMMARY") || "";
         let description = getField(e, "DESCRIPTION") || "";
         
-        // פונקציית ניקוי אגרסיבית
         const cleanText = (str) => {
             return str
                 .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, '')
@@ -162,7 +168,6 @@ async function run() {
         const cleanSummary = cleanText(summary);
         const cleanDesc = cleanText(description);
         
-        // סינון חכם
         const shouldIgnore = ignoredPhrases.some(p => {
             const cleanP = cleanText(p);
             return cleanSummary.includes(cleanP) || cleanDesc.includes(cleanP);
@@ -209,7 +214,6 @@ async function run() {
         const parsedEnd = toISO(end);
         const parsedStart = toISO(start);
 
-        // בניית ה-Payload ללא התאריך בהתחלה
         const payload = {
             content: summary,
             description: `📅 Opens: ${parsedStart || 'N/A'}\n🔑 UID: ${uid}`,
@@ -217,12 +221,11 @@ async function run() {
             labels: courseName ? ["שיעורי בית", courseName] : ["שיעורי בית"]
         };
 
-        // הוספת מפתח התאריך הנכון בהתאם לסוג האירוע
         if (parsedEnd) {
             if (parsedEnd.includes('T')) {
-                payload.due_datetime = parsedEnd; // אירוע עם שעה מדויקת
+                payload.due_datetime = parsedEnd;
             } else {
-                payload.due_date = parsedEnd; // אירוע של יום שלם
+                payload.due_date = parsedEnd;
             }
         }
 
@@ -249,12 +252,12 @@ async function run() {
                 stats.created++;
             }
         } catch (e) {
-            if (e.response && e.response.status === 404 && cached) {
-                console.log(`🗑️ Task ${cached.id} (UID: ${uid}) not found in Todoist. Removing from state.`);
+            // --- התיקון לזיהוי IDs שבורים (400) ---
+            if (e.response && (e.response.status === 404 || e.response.status === 400) && cached) {
+                console.log(`🗑️ Task ID ${cached.id} (UID: ${uid}) is invalid or missing in Todoist. Removing from state.`);
                 delete state[uid];
                 stateChanged = true;
             } else {
-                // הדפסת שגיאה מפורטת ישירות מה-API של Todoist במקרה של כישלון
                 const apiError = e.response?.data ? JSON.stringify(e.response.data) : e.message;
                 const errorMsg = `⚠️ Error on ${uid}: ${apiError}`;
                 console.log(errorMsg);
