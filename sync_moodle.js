@@ -36,7 +36,12 @@ const TODOIST_TOKEN = process.env.TODOIST_API_KEY;
 if (!TODOIST_TOKEN) { console.error("❌ Missing TODOIST_API_KEY"); process.exit(1); }
 
 // --- HELPERS ---
-const extractEvents = (text) => text?.match(/BEGIN:VEVENT[\s\S]+?END:VEVENT/gi) || [];
+// Unfold ICS lines first (removes the newline + space that splits long descriptions)
+const extractEvents = (text) => {
+    if (!text) return [];
+    const unfoldedText = text.replace(/\r?\n[ \t]/g, "");
+    return unfoldedText.match(/BEGIN:VEVENT[\s\S]+?END:VEVENT/gi) || [];
+};
 const getField = (block, name) => block.match(new RegExp(`^${name}(?:;[^:]*)?:(.*)$`, "mi"))?.[1].trim();
 
 const cleanID = (id) => id?.replace(/^0+/, "");
