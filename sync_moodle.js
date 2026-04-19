@@ -266,16 +266,22 @@ async function run() {
         }
     }
 
-    if (stateChanged || healedCount > 0) {
+        if (stateChanged || healedCount > 0) {
         fs.writeFileSync(CONFIG.gh_state_path, JSON.stringify(state, null, 2), "utf-8");
         console.log("💾 State DB updated.");
     }
     
+    // --- זו השורה שהייתה חסרה ---
+    console.log(`\n🏁 Done: +${stats.created} | 🔄 ${stats.updated} | ⏭️ ${stats.skipped}`);
+
     if (scriptErrors.length > 0 && process.env.GITHUB_STEP_SUMMARY) {
         const summaryText = `### 🚨 Sync Errors Detected\n\n` + scriptErrors.map(err => `* ${err}`).join('\n');
         fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryText);
         process.exit(1);
     }
 }
+
+run();
+
 
 run();
