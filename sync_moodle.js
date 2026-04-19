@@ -61,10 +61,18 @@ const getCourseName = (id) => {
     return entry ? entry[1] : null;
 };
 
+// פונקציית תאריכים משופרת - מטפלת גם בשעות וגם באירועי "יום שלם"
 const toISO = (icalDate) => {
     if (!icalDate) return null;
     const c = icalDate.replace('Z', '');
-    return (c.length >= 15) ? `${c.substring(0, 4)}-${c.substring(4, 6)}-${c.substring(6, 8)}T${c.substring(9, 11)}:${c.substring(11, 13)}:${c.substring(13, 15)}` : null;
+    if (c.length >= 15) {
+        // הוספת Z בסוף עבור אזור זמן UTC
+        return `${c.substring(0, 4)}-${c.substring(4, 6)}-${c.substring(6, 8)}T${c.substring(9, 11)}:${c.substring(11, 13)}:${c.substring(13, 15)}Z`;
+    } else if (c.length >= 8) {
+        // פורמט תאריך בלבד לאירועי יום שלם
+        return `${c.substring(0, 4)}-${c.substring(4, 6)}-${c.substring(6, 8)}`;
+    }
+    return null;
 };
 
 const simpleHash = (str) => crypto.createHash('md5').update(str).digest('hex');
@@ -142,11 +150,11 @@ async function run() {
         let summary = getField(e, "SUMMARY") || "";
         let description = getField(e, "DESCRIPTION") || "";
         
-        // פונקציית ניקוי אגרסיבית: מסירה תווים בלתי נראים, מנרמלת רווחים והופכת לאותיות קטנות
+        // פונקציית ניקוי אגרסיבית
         const cleanText = (str) => {
             return str
-                .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, '') // הסרת תווי שליטה וכיווניות
-                .replace(/\s+/g, ' ') // הפיכת כל סוגי הרווחים (כולל רווח קשיח) לרווח אחד רגיל
+                .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, '')
+                .replace(/\s+/g, ' ')
                 .toLowerCase()
                 .trim();
         };
@@ -154,14 +162,14 @@ async function run() {
         const cleanSummary = cleanText(summary);
         const cleanDesc = cleanText(description);
         
-        // בדיקה מול רשימת הביטויים (שעוברים גם הם ניקוי)
+        // סינון חכם
         const shouldIgnore = ignoredPhrases.some(p => {
             const cleanP = cleanText(p);
             return cleanSummary.includes(cleanP) || cleanDesc.includes(cleanP);
         });
 
         if (shouldIgnore) {
-            console.log(`🚫 Filtered out: "${summary}"`); // תדפיס ללוג כדי שתוכל לראות שזה עבד
+            console.log(`🚫 Filtered out: "${summary}"`);
             continue;
         }
         if (summary.includes("נפתח ב")) continue;
@@ -198,13 +206,25 @@ async function run() {
         const currentSig = `${summary}|${end}|${start || 'N/A'}`;
         const cached = state[uid];
 
+        const parsedEnd = toISO(end);
+        const parsedStart = toISO(start);
+
+        // בניית ה-Payload ללא התאריך בהתחלה
         const payload = {
             content: summary,
-            due_datetime: toISO(end),
-            description: `📅 Opens: ${toISO(start) || 'N/A'}\n🔑 UID: ${uid}`,
+            description: `📅 Opens: ${parsedStart || 'N/A'}\n🔑 UID: ${uid}`,
             priority: 4,
             labels: courseName ? ["שיעורי בית", courseName] : ["שיעורי בית"]
         };
+
+        // הוספת מפתח התאריך הנכון בהתאם לסוג האירוע
+        if (parsedEnd) {
+            if (parsedEnd.includes('T')) {
+                payload.due_datetime = parsedEnd; // אירוע עם שעה מדויקת
+            } else {
+                payload.due_date = parsedEnd; // אירוע של יום שלם
+            }
+        }
 
         try {
             if (cached && cached.id) {
@@ -234,7 +254,9 @@ async function run() {
                 delete state[uid];
                 stateChanged = true;
             } else {
-                const errorMsg = `⚠️ Error on ${uid}: ${e.message}`;
+                // הדפסת שגיאה מפורטת ישירות מה-API של Todoist במקרה של כישלון
+                const apiError = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+                const errorMsg = `⚠️ Error on ${uid}: ${apiError}`;
                 console.log(errorMsg);
                 scriptErrors.push(errorMsg);
             }
