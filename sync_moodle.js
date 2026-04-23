@@ -1,13 +1,22 @@
 import axios from "axios";
 import fs from "fs";
 import crypto from "crypto";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Get the directory of the current script (inside the Public Action repo)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // --- CONFIGURATION ---
 const CONFIG = {
+    // These should stay in the root of your PRIVATE repo
     gh_ical_path: "calendar.ics",
     gh_state_path: "todoist_state.json",
-    course_map_path: "course_map.json",
-    ignored_phrases_path: "ignored_phrases.txt"
+    
+    // These are part of the PUBLIC repo (the action itself)
+    course_map_path: path.join(__dirname, "course_map.json"),
+    ignored_phrases_path: path.join(__dirname, "ignored_phrases.txt")
 };
 
 /**
@@ -34,7 +43,7 @@ try {
         courseMap = JSON.parse(fs.readFileSync(CONFIG.course_map_path, "utf-8"));
     }
     if (fs.existsSync(CONFIG.ignored_phrases_path)) {
-        // Use a more robust split and pre-clean the phrases for efficiency
+        // Robust split and pre-clean the phrases during loading
         ignoredPhrases = fs.readFileSync(CONFIG.ignored_phrases_path, "utf-8")
             .split(/\r?\n/) 
             .map(line => line.trim())
@@ -176,7 +185,6 @@ async function run() {
         const cleanSummary = cleanText(summary);
         const cleanDesc = cleanText(description);
         
-        // Simplified check using pre-cleaned phrases
         const shouldIgnore = ignoredPhrases.some(p => {
             return cleanSummary.includes(p) || cleanDesc.includes(p);
         });
