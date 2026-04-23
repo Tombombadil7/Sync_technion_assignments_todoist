@@ -10,6 +10,21 @@ const CONFIG = {
     ignored_phrases_path: "ignored_phrases.txt"
 };
 
+/**
+ * Enhanced cleaning function to handle Hebrew normalization, 
+ * Niqqud (vowels), and hidden formatting characters.
+ */
+const cleanText = (str) => {
+    if (!str) return "";
+    return str
+        .normalize('NFC') // Normalize Unicode forms
+        .replace(/[\u0591-\u05C7]/g, '') // Remove Hebrew Niqqud/Accents
+        .replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E]/g, '') // Remove hidden marks
+        .replace(/\s+/g, ' ') // Normalize multiple spaces
+        .toLowerCase()
+        .trim();
+};
+
 // טעינת נתונים חיצוניים
 let courseMap = {};
 let ignoredPhrases = [];
@@ -19,10 +34,12 @@ try {
         courseMap = JSON.parse(fs.readFileSync(CONFIG.course_map_path, "utf-8"));
     }
     if (fs.existsSync(CONFIG.ignored_phrases_path)) {
+        // Use a more robust split and pre-clean the phrases for efficiency
         ignoredPhrases = fs.readFileSync(CONFIG.ignored_phrases_path, "utf-8")
-            .split('\n')
+            .split(/\r?\n/) 
             .map(line => line.trim())
-            .filter(line => line.length > 0 && !line.startsWith('//'));
+            .filter(line => line.length > 0 && !line.startsWith('//'))
+            .map(phrase => cleanText(phrase));
     }
 } catch (e) {
     console.error("❌ Error loading configuration files:", e.message);
@@ -41,9 +58,11 @@ const extractEvents = (text) => {
     const unfoldedText = text.replace(/\r?\n[ \t]/g, "");
     return unfoldedText.match(/BEGIN:VEVENT[\s\S]+?END:VEVENT/gi) || [];
 };
+
 const getField = (block, name) => block.match(new RegExp(`^${name}(?:;[^:]*)?:(.*)$`, "mi"))?.[1].trim();
 
 const cleanID = (id) => id?.replace(/^0+/, "");
+
 const getCourseID = (block) => {
     const cat = getField(block, "CATEGORIES")?.match(/(\d{6,9})(?:\.|$)/)?.[1];
     const sum = getField(block, "SUMMARY")?.match(/\((\d{6,9})\)/)?.[1];
@@ -104,13 +123,10 @@ async function run() {
     const activeTasks = await fetchActiveTodoistTasks(TODOIST_TOKEN);
     let healedCount = 0;
     
-    // --- התיקון למנגנון הריפוי ---
     activeTasks.forEach(task => {
-        // Regex מתוקן שתופס את כל ה-UID כולל השטרודל והדומיין
         const match = task.description?.match(/UID:\s*(\S+)/);
         if (match && match[1]) {
             const uid = match[1];
-            // אם המשימה לא קיימת בסטייט, או שה-ID שלה השתנה פתאום בגלל העדכון של Todoist
             if (!state[uid] || state[uid].id !== task.id) {
                 state[uid] = { id: task.id, sig: state[uid]?.sig || "recovered_from_api" };
                 stateChanged = true;
@@ -157,20 +173,12 @@ async function run() {
         let summary = getField(e, "SUMMARY") || "";
         let description = getField(e, "DESCRIPTION") || "";
         
-        const cleanText = (str) => {
-            return str
-                .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, '')
-                .replace(/\s+/g, ' ')
-                .toLowerCase()
-                .trim();
-        };
-
         const cleanSummary = cleanText(summary);
         const cleanDesc = cleanText(description);
         
+        // Simplified check using pre-cleaned phrases
         const shouldIgnore = ignoredPhrases.some(p => {
-            const cleanP = cleanText(p);
-            return cleanSummary.includes(cleanP) || cleanDesc.includes(cleanP);
+            return cleanSummary.includes(p) || cleanDesc.includes(p);
         });
 
         if (shouldIgnore) {
@@ -252,7 +260,6 @@ async function run() {
                 stats.created++;
             }
         } catch (e) {
-            // --- התיקון לזיהוי IDs שבורים (400) ---
             if (e.response && (e.response.status === 404 || e.response.status === 400) && cached) {
                 console.log(`🗑️ Task ID ${cached.id} (UID: ${uid}) is invalid or missing in Todoist. Removing from state.`);
                 delete state[uid];
@@ -266,12 +273,11 @@ async function run() {
         }
     }
 
-        if (stateChanged || healedCount > 0) {
+    if (stateChanged || healedCount > 0) {
         fs.writeFileSync(CONFIG.gh_state_path, JSON.stringify(state, null, 2), "utf-8");
         console.log("💾 State DB updated.");
     }
     
-    // --- זו השורה שהייתה חסרה ---
     console.log(`\n🏁 Done: +${stats.created} | 🔄 ${stats.updated} | ⏭️ ${stats.skipped}`);
 
     if (scriptErrors.length > 0 && process.env.GITHUB_STEP_SUMMARY) {
@@ -280,8 +286,5 @@ async function run() {
         process.exit(1);
     }
 }
-
-run();
-
 
 run();
