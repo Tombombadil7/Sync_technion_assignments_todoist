@@ -14,19 +14,21 @@ runs:
   using: 'composite'
   steps:
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      # Updated from @v3 to @v4 to resolve the deprecation warning
+      uses: actions/setup-node@v4 
       with:
-        node-version: '18'
+        # Updated from '18' to '24' to meet the June 2026 requirements
+        node-version: '24'
 
     - name: Install Dependencies
       shell: bash
       run: npm install
-      working-directory: ${{ github.action_path }}
+      working-directory: ${{ github.action_path }}[cite: 3]
 
     - name: Run Sync Script
       shell: bash
-      run: node ${{ github.action_path }}/sync_moodle.js
+      run: node ${{ github.action_path }}/sync_moodle.js[cite: 3]
       env:
-        TODOIST_API_KEY: ${{ inputs.todoist_api_key }}
-        MOODLE_URL: ${{ inputs.moodle_url }}
-        GRADES_URL: ${{ inputs.grades_url }}
+        TODOIST_API_KEY: ${{ inputs.todoist_api_key }}[cite: 3]
+        MOODLE_URL: ${{ inputs.moodle_url }}[cite: 3]
+        GRADES_URL: ${{ inputs.grades_url }}[cite: 3]
