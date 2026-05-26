@@ -166,10 +166,42 @@ async function run() {
         }
     }
 
-    const uniqueMap = new Map();
+const uniqueMap = new Map();
     const openMap = new Map();
     const moodleRegex = /(נפתח ב|תאריך הגשה)[:\s]+(.*)/i;
     allEvents.forEach(e => {
+        const cid = getCourseID(e);
+        const summary = getField(e, "SUMMARY") || "";
+        const match = summary.replace(/^.*? - /, "").match(moodleRegex);
+        if (cid && match && match[1].includes("נפתח ב")) {
+            openMap.set(`${cid}|${match[2].trim()}`, getField(e, "DTSTART"));
+        }
+    });
+
+    // המשתנה החדש שמונע כפילויות בהדפסה
+    const loggedIgnores = new Set();
+
+    for (let e of allEvents) {
+        let summary = getField(e, "SUMMARY") || "";
+        let description = getField(e, "DESCRIPTION") || "";
+        
+        const cleanSummary = cleanText(summary);
+        const cleanDesc = cleanText(description);
+        
+        const shouldIgnore = ignoredPhrases.some(p => {
+            return cleanSummary.includes(p) || cleanDesc.includes(p);
+        });
+
+        if (shouldIgnore) {
+            // מדפיס רק אם המחרוזת עדיין לא קיימת ב-Set
+            if (!loggedIgnores.has(summary)) {
+                console.log(`🚫 Filtered out: "${summary}"`);
+                loggedIgnores.add(summary);
+            }
+            continue;
+        }
+        
+        if (summary.includes("נפתח ב")) continue;
         const cid = getCourseID(e);
         const summary = getField(e, "SUMMARY") || "";
         const match = summary.replace(/^.*? - /, "").match(moodleRegex);
