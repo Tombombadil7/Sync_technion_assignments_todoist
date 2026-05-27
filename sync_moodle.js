@@ -169,6 +169,8 @@ async function run() {
 const uniqueMap = new Map();
     const openMap = new Map();
     const moodleRegex = /(נפתח ב|תאריך הגשה)[:\s]+(.*)/i;
+    
+    // 1. מיפוי זמני פתיחה (נפתח ב...)
     allEvents.forEach(e => {
         const cid = getCourseID(e);
         const summary = getField(e, "SUMMARY") || "";
@@ -178,9 +180,10 @@ const uniqueMap = new Map();
         }
     });
 
-    // המשתנה החדש שמונע כפילויות בהדפסה
+    // משתנה שמונע הדפסות כפולות של סינונים
     const loggedIgnores = new Set();
 
+    // 2. מעבר על כל האירועים לעיבוד הסופי
     for (let e of allEvents) {
         let summary = getField(e, "SUMMARY") || "";
         let description = getField(e, "DESCRIPTION") || "";
@@ -202,30 +205,6 @@ const uniqueMap = new Map();
         }
         
         if (summary.includes("נפתח ב")) continue;
-        const cid = getCourseID(e);
-        const summary = getField(e, "SUMMARY") || "";
-        const match = summary.replace(/^.*? - /, "").match(moodleRegex);
-        if (cid && match && match[1].includes("נפתח ב")) {
-            openMap.set(`${cid}|${match[2].trim()}`, getField(e, "DTSTART"));
-        }
-    });
-
-    for (let e of allEvents) {
-        let summary = getField(e, "SUMMARY") || "";
-        let description = getField(e, "DESCRIPTION") || "";
-        
-        const cleanSummary = cleanText(summary);
-        const cleanDesc = cleanText(description);
-        
-        const shouldIgnore = ignoredPhrases.some(p => {
-            return cleanSummary.includes(p) || cleanDesc.includes(p);
-        });
-
-        if (shouldIgnore) {
-            console.log(`🚫 Filtered out: "${summary}"`);
-            continue;
-        }
-        if (summary.includes("נפתח ב")) continue;
 
         const cid = getCourseID(e);
         const courseName = getCourseName(cid);
@@ -240,6 +219,7 @@ const uniqueMap = new Map();
             summary = `${courseName} - ${summary}`;
         }
         if (/(:| - )(יש להגיש|תאריך הגשה)/.test(summary)) summary = summary.replace(/(יש להגיש|תאריך הגשה)/g, "להגיש");
+        
         e = e.replace(/^(SUMMARY(?:;[^:]*)?:)(.*)$/m, `$1${summary}`);
         const uid = getField(e, "UID");
         if (uid) uniqueMap.set(uid, e);
