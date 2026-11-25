@@ -1,86 +1,36 @@
-# 📅 Technion Moodle to Todoist Sync
+# 📅 Technion Moodle → Todoist
 
-## 🚀 התקנה למשתמשים חדשים (מסלול מקוצר)
+סנכרון אוטומטי של מטלות מהיומן של Moodle (ויומן נוסף, אם יש) אל Todoist, באמצעות GitHub Actions. אין צורך בשרת או בהתקנת תוכנה.
 
-קובצי ההתחלה המוכנים נמצאים ב-[starter-template](./starter-template).
-**לתשומת לב:** זו כרגע תיקייה בתוך ריפו הקוד, ולא ריפו Template נפרד של GitHub.
-כדי להפוך אותה ל-Template אמיתי, בעל הפרויקט צריך ליצור ריפו ציבורי חדש, להעתיק אליו את שלושת הקבצים מתיקיית `starter-template` (כולל התיקייה `.github/workflows`), ולהפעיל `Settings → General → Template repository`.
-המשתמשים יוכלו לבחור `Use this template`, ליצור עותק **Private**, להגדיר Secrets ולהריץ את הסנכרון מהכרטיסייה Actions.
-מדריך ההתקנה המלא מופיע ב-[README של ה-Template](./starter-template/README.md).
+הסנכרון מזהה קורסים, מאחד אירועי פתיחה והגשה, מסנן אירועים לא רלוונטיים ומונע יצירת משימות כפולות.
 
----
+## 🚀 התחלה מהירה
 
+[![יצירת ריפו פרטי מהתבנית](https://img.shields.io/badge/Use_this_template-Start_here-2ea44f?style=for-the-badge&logo=github)](https://github.com/Tombombadil7/technion-todoist-starter/generate)
 
-כלי אוטומטי לסנכרון משימות מהמודל ומהטכניון ישירות לחשבון ה-Todoist שלך. המערכת מבוססת על הפרדה בין קוד (Public) לנתונים אישיים (Private) כדי לשמור על פרטיות מלאה.
+> **חשוב:** כפתור ההתקנה יהיה פעיל אחרי יצירת הריפו `technion-todoist-starter` והגדרתו כ-GitHub Template. בעת היצירה בחר **Private**.
 
----
+1. לחץ על הכפתור, תן שם לריפו החדש ובחר **Private**.
+2. העתק את קישור ה-iCal הפרטי מתוך Moodle ואת טוקן ה-API מתוך Todoist.
+3. בריפו הפרטי החדש פתח **Settings → Secrets and variables → Actions → New repository secret**, והוסף:
+   - `TODOIST_API_KEY` — טוקן ה-API של Todoist.
+   - `MOODLE_URL` — קישור ה-iCal האישי של Moodle.
+   - `GRADES_URL` — קישור ליומן נוסף (אופציונלי).
+4. פתח **Actions → Sync Technion assignments → Run workflow** להרצה הראשונה.
+5. בדוק שהמשימות נוצרו ב-Todoist. בהמשך GitHub יפעיל את הסנכרון באופן מתוזמן.
 
-## 🎯 המטרה
-ניהול אוטומטי של מטלות אקדמיות ב-Todoist ללא צורך בהזנה ידנית. המערכת יודעת:
-* **לתרגם** מספרי קורס לשמות קריאים (למשל: חדוא 1מ1).
-* **למזג** זמני פתיחה וסגירה של מטלות למשימה אחת.
-* **לסנן** רעשים כמו קישורי זום ושעות קבלה.
+**לא מצאת את Run workflow?** ודא שה-Workflows מופעלים בריפו החדש. אם שמירת קובצי המצב נכשלת, בדוק הרשאות כתיבה ב-**Settings → Actions → General → Workflow permissions**.
 
----
+## 🩺 תקלה בסנכרון?
 
-## 🚀 הוראות הטמעה (למשתמשים חדשים)
+פתח את ההרצה שנכשלה תחת **Actions**, ולאחר מכן את **Job summary** או את שלב **Run sync**. הודעות השגיאה מסבירות אם חסרה הגדרה, קישור היומן אינו תקין או ש-Todoist דחה את הבקשה.
 
-כדי להפעיל את הסנכרון, יש ליצור ריפוזיטורי פרטי שמריץ את הלוגיקה מכאן על הנתונים שלך:
+לבעיות נוספות אפשר [לפתוח Issue](https://github.com/Tombombadil7/Sync_technion_assignments_todoist/issues), **בלי לצרף טוקנים או קישורי יומן פרטיים**.
 
-### 1. יצירת Repository פרטי
-* צור ריפוזיטורי חדש ב-GitHub והגדר אותו כ-**Private**.
+## 🔧 למפתחים ולתורמים
 
-### 2. הגדרת Secrets
-בריפו הפרטי שיצרת, עבור ל-`Settings` > `Secrets and variables` > `Actions` והוסף:
-* `TODOIST_API_KEY`: הטוקן האישי שלך מ-Todoist.
-* `MOODLE_URL`: לינק ה-iCal מהמודל.
-* `GRADES_URL`: לינק של היומן מאתר מדמ"ח (אופציונלי)
+מנוע הסנכרון נמצא ב-[`sync_moodle.js`](./sync_moodle.js), והבדיקות האוטומטיות נמצאות בתיקיית [`tests`](./tests). כל Push או PR מריץ את בדיקות הסימולציה ללא קריאות ל-Todoist האמיתי.
 
-### 3. יצירת קובץ ה-Workflow
-צור קובץ בנתיב `.github/workflows/sync.yml` והדבק בתוכו:
+קובצי התבנית להכנת ריפו ה-Template נמצאים בתיקיית [`starter-template`](./starter-template). העתק את תוכנה **לשורש** ריפו Template נפרד והפעל בהגדרותיו **Template repository**.
 
-```yaml
-name: Daily Task Sync
-on:
-  schedule:
-    - cron: '0 * * * *' # Runs every hour
-  workflow_dispatch:
-
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout Private Data
-        uses: actions/checkout@v3
-
-      - name: Run Logic from Public Repo
-        uses: Tombombadil7/Sync_technion_assignments_todoist@main
-        with:
-          todoist_api_key: ${{ secrets.TODOIST_API_KEY }}
-          moodle_url: ${{ secrets.MOODLE_URL }}
-          grades_url: ${{ secrets.GRADES_URL }}
-        env:
-          TODOIST_API_KEY: ${{ secrets.TODOIST_API_KEY }}
-          MOODLE_URL: ${{ secrets.MOODLE_URL }}
-          GRADES_URL: ${{ secrets.GRADES_URL }}
-
-      - name: Commit and Push State
-        run: |
-          git config --global user.name 'Task Bot'
-          git config --global user.email 'bot@github.com'
-          git add todoist_state.json calendar.ics
-          git commit -m "Update task state [skip ci]" || exit 0
-          # Pull latest changes to avoid "rejected" error
-          git pull --rebase origin main
-          git push
-```
-
-### 4. הרשאות אחרונות
-​עבור ל-Settings > Actions > General ותחת Workflow permissions בחר ב-Read and write permissions.
-
-### ​🔄 עדכונים
-​כל תיקון באג או עדכון של מיפויי קורסים
-שאבצע בריפו הזה יתעדכן אצלך באופן אוטומטי בהרצה הבאה.
-​נכתב עבור סטודנטים בטכניון.
+הנתונים האישיים נשמרים בריפו הפרטי של כל משתמש; לעולם אל תעלה אותם לריפו הציבורי.
