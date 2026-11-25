@@ -1,5 +1,16 @@
 # 📅 Technion Moodle to Todoist Sync
 
+## 🚀 התקנה למשתמשים חדשים (מסלול מקוצר)
+
+קובצי ההתחלה המוכנים נמצאים ב-[starter-template](./starter-template).
+**לתשומת לב:** זו כרגע תיקייה בתוך ריפו הקוד, ולא ריפו Template נפרד של GitHub.
+כדי להפוך אותה ל-Template אמיתי, בעל הפרויקט צריך ליצור ריפו ציבורי חדש, להעתיק אליו את שלושת הקבצים מתיקיית `starter-template` (כולל התיקייה `.github/workflows`), ולהפעיל `Settings → General → Template repository`.
+המשתמשים יוכלו לבחור `Use this template`, ליצור עותק **Private**, להגדיר Secrets ולהריץ את הסנכרון מהכרטיסייה Actions.
+מדריך ההתקנה המלא מופיע ב-[README של ה-Template](./starter-template/README.md).
+
+---
+
+
 כלי אוטומטי לסנכרון משימות מהמודל ומהטכניון ישירות לחשבון ה-Todoist שלך. המערכת מבוססת על הפרדה בין קוד (Public) לנתונים אישיים (Private) כדי לשמור על פרטיות מלאה.
 
 ---
