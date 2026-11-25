@@ -1,4 +1,5 @@
 import axios from "axios";
+import { validateConfig, describeFetchFailure, describeTodoistFailure, appendSummary } from "./diagnostics.js";
 import fs from "fs";
 import crypto from "crypto";
 import path from "path";
@@ -59,7 +60,13 @@ const MOODLE_URL = process.env.MOODLE_URL;
 const GRADES_URL = process.env.GRADES_URL;
 const TODOIST_TOKEN = process.env.TODOIST_API_KEY;
 
-if (!TODOIST_TOKEN) { console.error("❌ Missing TODOIST_API_KEY"); process.exit(1); }
+const configProblems = validateConfig(process.env);
+if (configProblems.length) {
+    const messages = configProblems.map(([key, message]) => key + ": " + message);
+    messages.forEach(message => console.error("❌ " + message));
+    appendSummary(process.env, "❌ בעיית הגדרות בסנכרון", messages);
+    process.exit(1);
+}
 
 // --- HELPERS ---
 const extractEvents = (text) => {
@@ -110,7 +117,7 @@ async function fetchActiveTodoistTasks(token) {
         const data = res.data;
         return Array.isArray(data) ? data : (data.tasks || data.items || []);
     } catch (e) {
-        console.log("⚠️ Could not fetch active tasks. Proceeding with local state only.");
+        console.log("⚠️ " + describeTodoistFailure(e) + " ממשיך עם המצב המקומי בלבד.");
         return [];
     }
 }
@@ -160,7 +167,7 @@ async function run() {
             const res = await axios.get(source.url, { responseType: 'text', headers: { "User-Agent": "Mozilla/5.0" } });
             allEvents.push(...extractEvents(res.data));
         } catch (e) { 
-            const errorMsg = `❌ Fetch failed: ${source.name} - ${e.message}`;
+            const errorMsg = `❌ Fetch failed: ${source.name} - ${describeFetchFailure(source.name, e)}`;
             console.error(errorMsg); 
             scriptErrors.push(errorMsg);
         }
@@ -285,7 +292,7 @@ const uniqueMap = new Map();
                 delete state[uid];
                 stateChanged = true;
             } else {
-                const apiError = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+                const apiError = describeTodoistFailure(e);
                 const errorMsg = `⚠️ Error on ${uid}: ${apiError}`;
                 console.log(errorMsg);
                 scriptErrors.push(errorMsg);
@@ -300,9 +307,8 @@ const uniqueMap = new Map();
     
     console.log(`\n🏁 Done: +${stats.created} | 🔄 ${stats.updated} | ⏭️ ${stats.skipped}`);
 
-    if (scriptErrors.length > 0 && process.env.GITHUB_STEP_SUMMARY) {
-        const summaryText = `### 🚨 Sync Errors Detected\n\n` + scriptErrors.map(err => `* ${err}`).join('\n');
-        fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryText);
+    if (scriptErrors.length > 0) {
+        appendSummary(process.env, "🚨 שגיאות בסנכרון", scriptErrors);
         process.exit(1);
     }
 }

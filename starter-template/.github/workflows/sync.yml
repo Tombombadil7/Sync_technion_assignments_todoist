@@ -1,0 +1,48 @@
+name: Sync Technion assignments
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: technion-todoist-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout private data
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Run sync
+        uses: Tombombadil7/Sync_technion_assignments_todoist@main
+        with:
+          todoist_api_key: ${{ secrets.TODOIST_API_KEY }}
+          moodle_url: ${{ secrets.MOODLE_URL }}
+          grades_url: ${{ secrets.GRADES_URL }}
+
+      - name: Save local calendar and task state
+        if: success()
+        shell: bash
+        run: |
+          git config user.name 'Technion Sync Bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for file in calendar.ics todoist_state.json; do
+            if [ -f "$file" ]; then
+              git add -- "$file"
+            fi
+          done
+          if git diff --cached --quiet; then
+            echo "No calendar or state changes."
+            exit 0
+          fi
+          git commit -m "Update synchronized assignments [skip ci]"
+          git push
