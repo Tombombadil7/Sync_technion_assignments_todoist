@@ -8,7 +8,6 @@
 
 [![יצירת ריפו פרטי מהתבנית](https://img.shields.io/badge/Use_this_template-Start_here-2ea44f?style=for-the-badge&logo=github)](https://github.com/Tombombadil7/technion-todoist-starter/generate)
 
-> **חשוב:** כפתור ההתקנה יהיה פעיל אחרי יצירת הריפו `technion-todoist-starter` והגדרתו כ-GitHub Template. בעת היצירה בחר **Private**.
 
 1. לחץ על הכפתור, תן שם לריפו החדש ובחר **Private**.
 2. העתק את קישור ה-iCal הפרטי מתוך Moodle ואת טוקן ה-API מתוך Todoist.
