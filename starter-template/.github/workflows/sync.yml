@@ -35,7 +35,11 @@ jobs:
         run: |
           git config user.name 'Technion Sync Bot'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- calendar.ics todoist_state.json
+          for file in calendar.ics todoist_state.json; do
+            if [ -f "$file" ]; then
+              git add -- "$file"
+            fi
+          done
           if git diff --cached --quiet; then
             echo "No calendar or state changes."
             exit 0
